@@ -1,0 +1,22 @@
+* Two steps to build samconf:
+
+    make register
+    make all
+
+* Clean project:
+
+    make clean
+
+* Clean all target files:
+
+    make distclean
+
+* Add new chip support:
+
+    1) Copy chip's atdf or svd file to xml folder.
+    2) Generate register description for new chip:
+        make register
+    3) Update sam_series array in reg.c if necessary.
+    4) Update series_id enum in reg.c if necessary.
+    5) Update sam_chips for new chip.
+
