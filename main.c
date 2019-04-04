@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
 			case 'v':
 				fprintf(stderr, "%s - %s\n", project, VERSION);
 				exit(EXIT_SUCCESS);
-			case 'f':
+			case 'F':
 			case 's':
 			case 'l':
 				exit_error = 1;
