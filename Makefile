@@ -38,7 +38,6 @@ samconf: $(OBJECTS)
 	$(STRIP) $@
 	mkdir -p ./$(OUT_DIR)
 	cp $@ ./$(OUT_DIR)
-	cp $@ ~/srv/nfs
 
 clean:
 	-rm -f samconf *.o *.map
