@@ -2,23 +2,34 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 
 #include "reg_api.h"
 #include "memdev2.h"
 
-int max_length(char **str, size_t step)
+int max_length(char **str, size_t step, int count, char *similar)
 {
-	int max = 0;
-	int len;
+	int ret = 0;
+	int len, i;
 
+	i = 0;
 	while (*str != NULL) {
-		len = strlen(*str);
-		if (len > max)
-			max = len;
-		str = (char **)((unsigned long)str + step);
+		if ((count == 0) || (i < count)) {
+			if ((similar == NULL) || \
+				(strncasecmp(*str, similar, strlen(similar)) == 0)) {
+				len = strlen(*str);
+				if (len > ret)
+					ret = len;
+				i++;
+			}
+
+			str = (char **)((unsigned long)str + step);
+		} else
+			break;
 	}
 
-	return max;
+	return ret;
 }
 
 char *access_str(uint access)
@@ -34,6 +45,51 @@ char *access_str(uint access)
 		strcat(str, "C");
 
 	return str;
+}
+
+int list(char **str, size_t step, char *similar)
+{
+	struct winsize win;
+	int i, j;
+	int count, longest, offset;
+	int rows, cols;
+
+	if (isatty(STDOUT_FILENO) != 1) {
+		printf("ERROR: %s() not a tty\n", __func__);
+		return -1;
+	}
+
+	win.ws_row = 0;
+	win.ws_col = 0;
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) || \
+		(win.ws_row == 0) || (win.ws_col == 0)) {
+		win.ws_row = 24; // follow busybox
+		win.ws_col = 80; // ..
+	}
+
+	count = 0;
+	while (*((char **)((unsigned long)str + count*step)) != NULL)
+		count++;
+
+	longest = max_length(str, step, 0, NULL);
+	cols = win.ws_col/(longest+SPACING_SIZE);
+	rows = count/cols;
+	if (count%cols > 0)
+		rows++;
+
+	for (i=0; i<rows; i++) {
+		offset = i;
+		j = 0;
+		while (offset < count) {
+			longest = max_length((char **)((unsigned long)str + step*j*rows), step, rows, NULL);
+			printf("%-*s", longest + SPACING_SIZE, *(char **)((unsigned long)str + step*offset));
+			offset += rows;
+			j++;
+		}
+		printf("\n");
+	}
+
+	return 0;
 }
 
 #if 0
@@ -134,13 +190,12 @@ int exist_register(ip *sam_ip, char *name)
 void list_chips(chip (*chips_p)[], char *similar, int info)
 {
 	int i;
-	int longest = max_length((char **)(*chips_p), sizeof(chip));
+	int longest = max_length((char **)(*chips_p), sizeof(chip), 0, similar);
 
 	for (i = 0; (*chips_p)[i].name != NULL; i++) {
-		if (info == INFO_LIST_BASIC) { // TBD, follow ls
-			if ((similar == NULL) || \
-				(strncasecmp((*chips_p)[i].name, similar, strlen(similar)) == 0))
-				printf("%s\n", (*chips_p)[i].name);
+		if (info == INFO_LIST_BASIC) {
+			list((char **)(*chips_p), sizeof(chip), similar);
+			break;
 		} else if (info == INFO_LIST_MORE) {
 			if ((similar == NULL) || \
 				(strncasecmp((*chips_p)[i].name, similar, strlen(similar)) == 0))
@@ -156,13 +211,12 @@ void list_chips(chip (*chips_p)[], char *similar, int info)
 void list_modules(chip *sam_chip, char *similar, int info)
 {
 	int i;
-	int longest = max_length((char **)(*sam_chip->ips), sizeof(ip));
+	int longest = max_length((char **)(*sam_chip->ips), sizeof(ip), 0, similar);
 
 	for (i = 0; (*sam_chip->ips)[i].name != NULL; i++) {
-		if (info == INFO_LIST_BASIC) { // TBD, follow ls
-			if ((similar == NULL) || \
-				(strncasecmp((*sam_chip->ips)[i].name, similar, strlen(similar)) == 0))
-				printf("%s%s\n", SPACING_STR, (*sam_chip->ips)[i].name);
+		if (info == INFO_LIST_BASIC) {
+			list((char **)(*sam_chip->ips), sizeof(ip), similar);
+			break;
 		} else if (info == INFO_LIST_MORE) {
 			if ((similar == NULL) || \
 				(strncasecmp((*sam_chip->ips)[i].name, similar, strlen(similar)) == 0))
@@ -176,14 +230,12 @@ void list_modules(chip *sam_chip, char *similar, int info)
 void list_registers(ip *sam_ip, char *similar, info_id info)
 {
 	int i;
-	int longest = max_length((char **)(*sam_ip->regs), sizeof(reg));
+	int longest = max_length((char **)(*sam_ip->regs), sizeof(reg), 0, similar);
 
 	for (i = 0; (*sam_ip->regs)[i].name != NULL; i++) {
-		if (info == INFO_LIST_BASIC) { // TBD, follow ls
-			if ((similar == NULL) || \
-				(strncasecmp((*sam_ip->regs)[i].name, similar, strlen(similar)) == 0))
-				printf("%s%s_%s\n", SPACING_STR2, sam_ip->name, \
-					(*sam_ip->regs)[i].name);
+		if (info == INFO_LIST_BASIC) {
+			list((char **)(*sam_ip->regs), sizeof(reg), similar);
+			break;
 		} else if (info == INFO_LIST_MORE) {
 			if ((similar == NULL) || \
 				(strncasecmp((*sam_ip->regs)[i].name, similar, strlen(similar)) == 0))
@@ -228,7 +280,7 @@ int compare_register(chip *sam_chip, char *file)
 	FILE *fp;
 	int data_error=0;
 	int mod_id, reg_id;
-  ulong reg_addr, reg_data, data;
+	ulong reg_addr, reg_data, data;
 	char *mod_p, *ver_p, *reg_p;
 	char buf[MAX_NAME_LEN+1];
 
@@ -241,7 +293,7 @@ int compare_register(chip *sam_chip, char *file)
 	// First read chip name line
 	if (fgets(buf, MAX_NAME_LEN, fp) == NULL) {
 		printf("ERROR: %s() fail to read file %s\n", __func__, file);
-    goto ERROR;
+		goto ERROR;
 	}
 	// Strip last '\n'
 	if (buf[strlen(buf)-1] == '\n')
@@ -255,12 +307,12 @@ int compare_register(chip *sam_chip, char *file)
 
 	// Second read module name line
 	if (fgets(buf, MAX_NAME_LEN, fp) == NULL) {
-    printf("ERROR: %s() fail to read file %s\n", __func__, file);
-    goto ERROR;
-  }
-  // Remove the '\n' bebind
-  if (buf[strlen(buf)-1] == '\n')
-    buf[strlen(buf)-1] = '\0';
+		printf("ERROR: %s() fail to read file %s\n", __func__, file);
+		goto ERROR;
+	}
+	// Remove the '\n' bebind
+	if (buf[strlen(buf)-1] == '\n')
+		buf[strlen(buf)-1] = '\0';
 	// Get module and version
 	mod_p = buf;
 	while (*mod_p == ' ')
@@ -272,7 +324,7 @@ int compare_register(chip *sam_chip, char *file)
 	}
 	*ver_p = '\0';
 	ver_p++;
-  // Check module name line
+	// Check module name line
 	mod_id = exist_module(sam_chip, mod_p);
 	if (mod_id < 0) {
 		printf("ERROR: %s() module \"%s\" does not exist\n", __func__, mod_p);
@@ -280,7 +332,7 @@ int compare_register(chip *sam_chip, char *file)
 	}
 	if (strcmp((*sam_chip->ips)[mod_id].version, ver_p) != 0) {
 		printf("ERROR: %s() module version mismatched\n", __func__);
-    goto ERROR;
+		goto ERROR;
 	}
 	ver_p[-1] = '_';
 	printf("%s\t --> matched\n", buf);
@@ -292,12 +344,12 @@ int compare_register(chip *sam_chip, char *file)
 		}
 		mod_p = buf;
 		while (*mod_p == ' ')
-    mod_p++;
+		mod_p++;
 		reg_p = strchr(mod_p, '_');
 		if (reg_p == NULL) {
-    	printf("ERROR: %s() wrong register name format: %s\n", __func__, buf);
-    	goto ERROR;
-  	}
+			printf("ERROR: %s() wrong register name format: %s\n", __func__, buf);
+			goto ERROR;
+		}
 		*reg_p = '\0';
 		reg_p++;
 
@@ -309,13 +361,13 @@ int compare_register(chip *sam_chip, char *file)
 		reg_id = exist_register(&(*sam_chip->ips)[mod_id], reg_p);
 		if (reg_id < 0) {
 			printf("ERROR: %s() register \"%s_%s\" does not exist\n", __func__, \
-      	mod_p, reg_p);
+			mod_p, reg_p);
 			goto ERROR;
 		}
 
 		if (reg_addr != (*sam_chip->ips)[mod_id].addr + (*((*sam_chip->ips)[mod_id].regs))[reg_id].addr) {
 			printf("ERROR: %s() wrong register address %s_%s\n", __func__, \
-        mod_p, reg_p);
+			mod_p, reg_p);
 			goto ERROR;
 		}
 
