@@ -94,8 +94,9 @@ int main(int argc, char **argv) {
 	if (id_chip < 0) {
 		id_chip = detect_chip(&sam_chips, &sam_series, &id_similar);
 		if ((id_chip == -1) && (id_similar == -1)) {
-			printf("ERROR: chip and series wasn't detected in following list:\n");
+			printf("ERROR: chip and series in following list wasn't detected:\n");
 			list_chips(&sam_chips, NULL, 0);
+			printf("\n\"cp samconf NAME_IN_CHIP_LIST\" to force selection chip\n");
 			exit(EXIT_FAILURE);
 		} else if (id_chip >=0) {
 			if (argc <= 1)
