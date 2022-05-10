@@ -54,7 +54,6 @@ char *strip_path(char *file_path)
 
 int main(int argc, char **argv) {
 	int ret;
-	int i;
 	int access = 0;
 	ulong address, data = 0;
 	char *ip_name, *reg_name;
@@ -202,13 +201,12 @@ int main(int argc, char **argv) {
 
 	// Process register access
 	ret = strlen(argv[1]);
-	ip_name  = strtok(argv[1], "_");
-	reg_name = strtok(NULL, "_");
-	if ((ip_name == NULL) || (reg_name == NULL)) {
-		for(i=0; i<ret; i++) {
-			if (argv[1][i] == '\0')
-				argv[1][i] = '_';
-		}
+	ip_name  = argv[1];
+	reg_name = strchr(argv[1] + 1, '_');
+	if (reg_name) {
+		*reg_name = '\0';
+		reg_name++;
+	} else {
 		printf("%s:\n  incorrect register name format \"%s\"\n", \
 			sam_chips[id_chip].name, argv[1]);
 		return -1;
